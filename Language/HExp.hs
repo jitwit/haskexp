@@ -8,6 +8,8 @@ import Data.List
 import Data.Foldable
 import Data.Vector (Vector,fromList)
 import Data.Array (Array,listArray,bounds,elems)
+import Data.ByteString (ByteString)
+import Data.Text (Text)
 import Data.Map (Map)
 import Data.Set (Set)
 import Data.IntSet (IntSet)
@@ -78,6 +80,8 @@ data SEXP where
   SChar :: Char -> SEXP
   SString :: String -> SEXP
   SSymbol :: String -> SEXP
+  SByteString :: ByteString -> SEXP
+  SText :: Text -> SEXP
   SList :: [SEXP] -> SEXP
   SCons :: SEXP -> SEXP -> SEXP
   SVector :: Vector SEXP -> SEXP
@@ -94,6 +98,8 @@ instance Show SEXP where
     SChar x -> "#\\" <> [x]
     SString x -> show x
     SSymbol x -> x
+    SByteString x -> show x
+    SText x -> show x
     SDouble x -> show x
     SFloat x -> show x
     SRatio (x :% y) -> concat [show x,"/",show y]
@@ -133,10 +139,16 @@ instance SEXPOf Integer where
 
 instance SEXPOf Double where
   sexp_of = SDouble
-  
+
 instance SEXPOf Float where
   sexp_of = SFloat
-  
+
+instance SEXPOf ByteString where
+  sexp_of = SByteString
+
+instance SEXPOf Text where
+  sexp_of = SText
+
 instance (Show v, Num v, Ord v, SEXPOf v) => SEXPOf (Complex v) where
   sexp_of = SComplex
 

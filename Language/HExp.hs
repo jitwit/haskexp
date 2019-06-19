@@ -12,6 +12,7 @@ import Data.Set (Set)
 import Data.IntSet (IntSet)
 import Data.IntMap (IntMap)
 import Data.Complex
+import Data.Tree
 import GHC.Real
 
 put_hexp :: SEXP -> IO ()
@@ -39,9 +40,17 @@ hv3 = HExpQuote hv1
 hv4 = HExpQuasiQuote hv1
 hv5 = sexp_of ()
 hv6 = sexp_of ((), (1 :+ 2) :: Complex Double, (1 :% 123) :: Rational)
+t1,t2 :: Tree Int
+t1 = Node 1 []
+t2 = Node 3 [Node 4 [Node 6 [], Node 8 []], Node 5 []]
+hv7 = sexp_of t1
+hv8 = sexp_of t2
+hv9 = HExpCons hv2 he4
+hv10 = HExpCons hv2 he7
+hv11 = HExpCons hv2 (HExpList [he7])
 
 hexps1 = [he1,he2,he3,he4,he5,he6,he7,he8,he9,he10
-         ,hv1,hv2,hv3,hv4,hv5,hv6]
+         ,hv1,hv2,hv3,hv4,hv5,hv6,hv7,hv8,hv9,hv10,hv11]
 
 ghcid = do traverse_ put_hexp hexps1
 
@@ -137,6 +146,10 @@ instance SEXPOf v => SEXPOf (Set v) where
 
 instance SEXPOf h => SEXPOf (Vector h) where
   sexp_of = HExpVector . fmap sexp_of
+
+instance SEXPOf h => SEXPOf (Tree h) where
+  sexp_of (Node x []) = sexp_of x
+  sexp_of (Node x xs) = HExpCons (sexp_of x) (sexp_of xs)
 
 instance Semigroup SEXP where
   HExpList xs <> HExpList ys = HExpList (xs <> ys)

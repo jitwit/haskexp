@@ -170,6 +170,6 @@ instance Semigroup SEXP where
   x <> y = SCons x y
 
 instance Monoid SEXP where
-  mempty = SList []
+  mempty = sexp_of ()
 
   

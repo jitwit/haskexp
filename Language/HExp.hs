@@ -44,7 +44,13 @@ hv5 = sexp_of ()
 hv6 = sexp_of ((), (1 :+ 2) :: Complex Double, (1 :% 123) :: Rational)
 t1,t2 :: Tree Int
 t1 = Node 1 []
-t2 = Node 3 [Node 4 [Node 6 [], Node 8 []], Node 5 []]
+t2 = Node 3 [ Node 4 [Node 6 [], Node 8 []]
+            , Node 5 []
+            , Node 8 [ Node 6 []
+                     , Node 4 [Node 3
+                               [ Node 4 [ Node 6 [], Node 8 []]
+                               , Node 5 []
+                               , Node 8 [Node 6 [], Node 4 []]]]]]
 hv7 = sexp_of t1
 hv8 = sexp_of t2
 hv9 = SCons hv2 he4
@@ -53,10 +59,12 @@ hv11 = SCons hv2 (SList [he7])
 a1 :: Array Int Int
 a1 = listArray (0,2) [1..3]
 ha1 = sexp_of a1
+ha2 = SUnquote hv10
+ha3 = SList [SSymbol "list", hv3, SUnquoteSplicing hv4]
 
 hexps1 = [he1,he2,he3,he4,he5,he6,he7,he8,he9,he10,he11
          ,hv1,hv2,hv3,hv4,hv5,hv6,hv7,hv8,hv9,hv10,hv11
-         ,ha1]
+         ,ha1,ha2,ha3]
 
 ghcid = do traverse_ put_hexp hexps1
 
@@ -75,6 +83,8 @@ data SEXP where
   SVector :: Vector SEXP -> SEXP
   SQuote :: SEXP -> SEXP
   SQuasiQuote :: SEXP -> SEXP
+  SUnquote :: SEXP -> SEXP
+  SUnquoteSplicing :: SEXP -> SEXP
 
 instance Show SEXP where
   show = \case
@@ -97,6 +107,8 @@ instance Show SEXP where
     SVector v -> '#' : show (SList (toList v)) 
     SQuote x -> '\'' : show x
     SQuasiQuote x -> '`' : show x
+    SUnquote x -> ',' : show x
+    SUnquoteSplicing x -> ",@" <> show x
 
 class SEXPOf h where
   sexp_of :: h -> SEXP
@@ -144,6 +156,14 @@ instance (SEXPOf a, SEXPOf b, SEXPOf c, SEXPOf d)
       => SEXPOf (a,b,c,d) where
   sexp_of (x,y,z,w) = SList [sexp_of x, sexp_of y, sexp_of z, sexp_of w]
 
+instance (SEXPOf a, SEXPOf b, SEXPOf c, SEXPOf d, SEXPOf e)
+      => SEXPOf (a,b,c,d,e) where
+  sexp_of (x,y,z,v,w) = SList [ sexp_of x
+                              , sexp_of y
+                              , sexp_of z
+                              , sexp_of v
+                              , sexp_of w ]
+
 instance (SEXPOf k, SEXPOf v) => SEXPOf (Map k v) where
   sexp_of = sexp_of . toList
 
@@ -176,11 +196,3 @@ instance Monoid SEXP where
   mempty = SList []
 
   
---  a@Atom{} <> b@Atom{} = List [a,b]
---  a@Atom{} <> List xs = List (a:xs)
---  List xs <> b@Atom{} = List (xs <> [b])
---  List xs <> List ys = List (xs <> ys)
-
---instance Monoid (SEXP a) where
---  mempty = List []
-    

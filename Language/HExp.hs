@@ -1,4 +1,4 @@
-{-# language GADTs, TypeSynonymInstances, FlexibleInstances, LambdaCase, DeriveTraversable #-}
+{-# language GADTs, LambdaCase, MultiWayIf, TypeApplications #-}
 
 module Language.HExp where
 
@@ -7,76 +7,152 @@ import Data.Word
 import Data.List
 import Data.Foldable
 import Data.Vector (Vector)
+import Data.Map (Map)
+import Data.Set (Set)
+import Data.IntSet (IntSet)
+import Data.IntMap (IntMap)
+import Data.Complex
+import GHC.Real
 
 put_hexp :: SEXP -> IO ()
 put_hexp = putStrLn . show
 
 he1 :: SEXP
-he1 = HExpL [HExpI 1, HExpI 2]
+he1 = HExpList [HExpInteger 1, HExpInteger 2]
 he2 :: SEXP
-he2 = HExpC 'x'
+he2 = HExpChar 'x'
 he3 :: SEXP
-he3 = HExpL [HExpC 'x', HExpC 'y']
+he3 = HExpList [HExpChar 'x', HExpChar 'y']
 he4 :: SEXP
-he4 = HExpL [ HExpS "cat"
-            , HExpL [HExpS "bird", HExpS "wolf"]]
-he5 = HExpP he2 he3
-he6 = HExpP (HExpS "cat") (HExpI 12)
+he4 = HExpList [ HExpSymbol "cat"
+               , HExpList [HExpString "bird", HExpString "wolf"]]
+he5 = HExpCons he2 he3
+he6 = HExpCons (HExpString "cat") (HExpInteger 12)
+he7 = HExpRatio (1 :% 3)
+he8 = HExpComplex (1 :+ 3)
+he9 = HExpComplex (1 :+ (-3))
+he10 = HExpComplex (1 :+ 0)
 
-ghcid = do traverse_ put_hexp [he1,he2,he3,he4,he5,he6]
+hv1 = sexp_of @(Int,Integer) (12,13)
+hv2 = sexp_of [1..10 :: Int]
+hv3 = HExpQuote hv1
+hv4 = HExpQuasiQuote hv1
+hv5 = sexp_of ()
+hv6 = sexp_of ((), (1 :+ 2) :: Complex Double, (1 :% 123) :: Rational)
+
+hexps1 = [he1,he2,he3,he4,he5,he6,he7,he8,he9,he10
+         ,hv1,hv2,hv3,hv4,hv5,hv6]
+
+ghcid = do traverse_ put_hexp hexps1
 
 data SEXP where
-  HExpB :: Bool -> SEXP
-  HExpI :: Integer -> SEXP
-  HExpC :: Char -> SEXP
-  HExpS :: String -> SEXP
-  HExpL :: [SEXP] -> SEXP
-  HExpP :: SEXP -> SEXP -> SEXP
-  HExpV :: Vector SEXP -> SEXP
+  HExpBool :: Bool -> SEXP
+  HExpInteger :: Integer -> SEXP
+  HExpDouble :: Double -> SEXP
+  HExpFloat :: Float -> SEXP
+  HExpComplex :: (Ord h, Num h, Show h) => Complex h -> SEXP
+  HExpRatio :: Show h => Ratio h -> SEXP
+  HExpChar :: Char -> SEXP
+  HExpString :: String -> SEXP
+  HExpSymbol :: String -> SEXP
+  HExpList :: [SEXP] -> SEXP
+  HExpCons :: SEXP -> SEXP -> SEXP
+  HExpVector :: Vector SEXP -> SEXP
+  HExpQuote :: SEXP -> SEXP
+  HExpQuasiQuote :: SEXP -> SEXP
 
 instance Show SEXP where
   show = \case
-    HExpL xs -> '(' : (unwords $ show <$> xs) <> ")"
-    HExpB b -> if b then "#t" else "#f"
-    HExpI x -> show x
-    HExpC x -> "#\\" <> [x]
-    HExpS x -> x
-    HExpP x y -> case y of
-      HExpL ys -> show (HExpL (x:ys))
+    HExpList xs -> '(' : (unwords $ show <$> xs) <> ")"
+    HExpBool b -> if b then "#t" else "#f"
+    HExpInteger x -> show x
+    HExpChar x -> "#\\" <> [x]
+    HExpString x -> show x
+    HExpSymbol x -> x
+    HExpDouble x -> show x
+    HExpFloat x -> show x
+    HExpRatio (x :% y) -> concat [show x,"/",show y]
+    HExpComplex (x :+ y) ->
+      if | y > 0 -> concat [show x,"+",show y,"i"]
+         | y < 0 -> concat [show x,"-",show (- y),"i"]
+         | otherwise -> show x
+    HExpCons x y -> case y of
+      HExpList ys -> show (HExpList (x:ys))
       _ -> '(' : unwords [show x, ".", show y]  <> ")"
-    HExpV v -> '#' : show (HExpL (toList v)) 
+    HExpVector v -> '#' : show (HExpList (toList v)) 
+    HExpQuote x -> '\'' : show x
+    HExpQuasiQuote x -> '`' : show x
 
-class AsSEXP h where
+class SEXPOf h where
   sexp_of :: h -> SEXP
 
-instance AsSEXP Bool where
-  sexp_of = HExpB
+instance SEXPOf () where
+  sexp_of () = HExpList []
 
-instance AsSEXP Char where
-  sexp_of = HExpC
+instance SEXPOf Bool where
+  sexp_of = HExpBool
 
-instance AsSEXP Int where
-  sexp_of = HExpI . fromIntegral
+instance SEXPOf Char where
+  sexp_of = HExpChar
 
-instance AsSEXP Word where
-  sexp_of = HExpI . fromIntegral
+instance SEXPOf Int where
+  sexp_of = HExpInteger . fromIntegral
 
-instance AsSEXP Integer where
-  sexp_of = HExpI
+instance SEXPOf Word where
+  sexp_of = HExpInteger . fromIntegral
 
-instance AsSEXP h => AsSEXP [h] where
-  sexp_of = HExpL . map sexp_of
+instance SEXPOf Integer where
+  sexp_of = HExpInteger
 
-instance (AsSEXP a, AsSEXP b) => AsSEXP (a,b) where
-  sexp_of (x,y) = HExpP (sexp_of x) (sexp_of y)
+instance SEXPOf Double where
+  sexp_of = HExpDouble
+  
+instance (Show v, Num v, Ord v, SEXPOf v) => SEXPOf (Complex v) where
+  sexp_of = HExpComplex
 
+instance (Show v, SEXPOf v) => SEXPOf (Ratio v) where
+  sexp_of = HExpRatio
 
-    --instance Semigroup (SEXP a) where
+instance SEXPOf h => SEXPOf [h] where
+  sexp_of = HExpList . map sexp_of
+
+instance (SEXPOf a, SEXPOf b) => SEXPOf (a,b) where
+  sexp_of (x,y) = HExpCons (sexp_of x) (sexp_of y)
+
+instance (SEXPOf a, SEXPOf b, SEXPOf c) => SEXPOf (a,b,c) where
+  sexp_of (x,y,z) = HExpList [sexp_of x, sexp_of y, sexp_of z]
+
+instance (SEXPOf a, SEXPOf b, SEXPOf c, SEXPOf d)
+      => SEXPOf (a,b,c,d) where
+  sexp_of (x,y,z,w) = HExpList [sexp_of x, sexp_of y, sexp_of z, sexp_of w]
+
+instance (SEXPOf k, SEXPOf v) => SEXPOf (Map k v) where
+  sexp_of = sexp_of . toList
+
+instance SEXPOf v => SEXPOf (IntMap v) where
+  sexp_of = sexp_of . toList
+
+instance SEXPOf v => SEXPOf (Set v) where
+  sexp_of = sexp_of . toList
+
+instance SEXPOf h => SEXPOf (Vector h) where
+  sexp_of = HExpVector . fmap sexp_of
+
+instance Semigroup SEXP where
+  HExpList xs <> HExpList ys = HExpList (xs <> ys)
+  HExpList xs <> y = if null xs then y else HExpList (xs <> [y])
+  x <> HExpList ys = if null ys then x else HExpList (x:ys)
+  x <> y = HExpCons x y
+
+instance Monoid SEXP where
+  mempty = HExpList []
+
+  
 --  a@Atom{} <> b@Atom{} = List [a,b]
 --  a@Atom{} <> List xs = List (a:xs)
 --  List xs <> b@Atom{} = List (xs <> [b])
 --  List xs <> List ys = List (xs <> ys)
---
+
 --instance Monoid (SEXP a) where
 --  mempty = List []
     

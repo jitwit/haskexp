@@ -1,10 +1,14 @@
 {-# language GADTs, LambdaCase, MultiWayIf #-}
 
-module Language.SEXP where
+module Language.SEXP
+  ( SEXP (..)
+  , Sexpressive (..)
+  , put_sexp
+  , put_sexp'
+  ) where
 
-import Data.String
+import Control.Monad
 import Data.Word
-import Data.List
 import Data.Foldable
 import Data.Vector (Vector,fromList)
 import Data.Array (Array,listArray,bounds,elems)
@@ -68,108 +72,128 @@ instance Show SEXP where
     SUnquote x -> ',' : show x
     SUnquoteSplicing x -> ",@" <> show x
 
-class SEXPOf h where
+class Sexpressive h where
   sexp_of :: h -> SEXP
 
-instance SEXPOf () where
+instance Sexpressive () where
   sexp_of () = SList []
 
-instance SEXPOf Bool where
+instance Sexpressive Bool where
   sexp_of = SBool
 
-instance SEXPOf Char where
+instance Sexpressive Char where
   sexp_of = SChar
 
-instance SEXPOf Int where
+instance Sexpressive Int where
   sexp_of = SInteger . fromIntegral
 
-instance SEXPOf Word where
+instance Sexpressive Word where
   sexp_of = SInteger . fromIntegral
 
-instance SEXPOf Integer where
+instance Sexpressive Integer where
   sexp_of = SInteger
 
-instance SEXPOf Double where
+instance Sexpressive Double where
   sexp_of = SDouble
 
-instance SEXPOf Float where
+instance Sexpressive Float where
   sexp_of = SFloat
 
-instance SEXPOf ByteString where
+instance Sexpressive ByteString where
   sexp_of = SByteString
 
-instance SEXPOf Text where
+instance Sexpressive Text where
   sexp_of = SText
 
-instance (Show v, Num v, Ord v, SEXPOf v) => SEXPOf (Complex v) where
+instance (Show v, Num v, Ord v, Sexpressive v) => Sexpressive (Complex v) where
   sexp_of = SComplex
 
-instance (Show v, SEXPOf v) => SEXPOf (Ratio v) where
+instance (Show v, Sexpressive v) => Sexpressive (Ratio v) where
   sexp_of = SRatio
 
-instance SEXPOf h => SEXPOf [h] where
+instance Sexpressive h => Sexpressive [h] where
   sexp_of = SList . map sexp_of
 
-instance (SEXPOf a, SEXPOf b) => SEXPOf (a,b) where
+instance (Sexpressive a, Sexpressive b) => Sexpressive (a,b) where
   sexp_of (x,y) = SCons (sexp_of x) (sexp_of y)
 
-instance (SEXPOf a, SEXPOf b, SEXPOf c) => SEXPOf (a,b,c) where
+instance (Sexpressive a, Sexpressive b, Sexpressive c) => Sexpressive (a,b,c) where
   sexp_of (x,y,z) = SList [sexp_of x, sexp_of y, sexp_of z]
 
-instance (SEXPOf a, SEXPOf b, SEXPOf c, SEXPOf d)
-      => SEXPOf (a,b,c,d) where
+instance (Sexpressive a, Sexpressive b, Sexpressive c, Sexpressive d)
+      => Sexpressive (a,b,c,d) where
   sexp_of (x,y,z,w) = SList [sexp_of x, sexp_of y, sexp_of z, sexp_of w]
 
-instance (SEXPOf a, SEXPOf b, SEXPOf c, SEXPOf d, SEXPOf e)
-      => SEXPOf (a,b,c,d,e) where
+instance (Sexpressive a, Sexpressive b, Sexpressive c, Sexpressive d, Sexpressive e)
+      => Sexpressive (a,b,c,d,e) where
   sexp_of (x,y,z,v,w) = SList
     [ sexp_of x, sexp_of y, sexp_of z, sexp_of v, sexp_of w ]
 
-instance (SEXPOf k, SEXPOf v) => SEXPOf (Map k v) where
+instance ( Sexpressive a
+         , Sexpressive b
+         , Sexpressive c
+         , Sexpressive d
+         , Sexpressive e
+         , Sexpressive f)
+      => Sexpressive (a,b,c,d,e,f) where
+  sexp_of (x,y,z,u,v,w) = SList
+    [ sexp_of x, sexp_of y, sexp_of z, sexp_of u, sexp_of v, sexp_of w ]
+
+instance (Sexpressive k, Sexpressive v) => Sexpressive (Map k v) where
   sexp_of = sexp_of . toList
 
-instance SEXPOf v => SEXPOf (IntMap v) where
+instance Sexpressive v => Sexpressive (IntMap v) where
   sexp_of = sexp_of . toList
 
-instance SEXPOf v => SEXPOf (Set v) where
+instance Sexpressive v => Sexpressive (Set v) where
   sexp_of = sexp_of . toList
 
-instance SEXPOf IntSet where
+instance Sexpressive IntSet where
   sexp_of = sexp_of . Data.IntSet.toList
 
-instance SEXPOf h => SEXPOf (Vector h) where
+instance Sexpressive h => Sexpressive (Vector h) where
   sexp_of = SVector . fmap sexp_of
 
-instance SEXPOf h => SEXPOf (Seq h) where
+instance Sexpressive h => Sexpressive (Seq h) where
   sexp_of = sexp_of . toList
 
-instance (SEXPOf i, SEXPOf h) => SEXPOf (Array i h) where
+instance (Sexpressive i, Sexpressive h) => Sexpressive (Array i h) where
   -- not sure what to do here
   sexp_of xs = SList [SSymbol "array"
                      ,sexp_of (bounds xs)
                      ,sexp_of (fromList (elems xs))]
 
-instance (SEXPOf k, SEXPOf v) => SEXPOf (HashMap k v) where
+instance (Sexpressive k, Sexpressive v) => Sexpressive (HashMap k v) where
   sexp_of = sexp_of . toList
 
-instance SEXPOf k => SEXPOf (HashSet k) where
+instance Sexpressive k => Sexpressive (HashSet k) where
   sexp_of = sexp_of . toList
 
-instance SEXPOf h => SEXPOf (Tree h) where
+instance Sexpressive h => Sexpressive (Tree h) where
   sexp_of (Node x []) = sexp_of x
   sexp_of (Node x xs) = SCons (sexp_of x) (sexp_of xs)
 
-instance SEXPOf h => SEXPOf (Maybe h) where
+instance Sexpressive h => Sexpressive (Maybe h) where
   -- truthy
   sexp_of = maybe (SBool False) sexp_of
 
+scons :: SEXP -> SEXP -> SEXP
+scons (SList []) y = y
+scons x (SList []) = x
+scons (SList xs) y = SList (xs <> [y])
+scons x (SList ys) = SList (x:ys)
+scons x y = SCons x y
+
 instance Semigroup SEXP where
-  SList xs <> SList ys = SList (xs <> ys)
-  SList xs <> y = if null xs then y else SList (xs <> [y])
-  x <> SList ys = if null ys then x else SList (x:ys)
-  x <> y = SCons x y
+  (<>) = scons
 
 instance Monoid SEXP where
   mempty = sexp_of ()
 
-  
+put_sexp :: SEXP -> IO ()
+put_sexp = putStrLn . show
+
+put_sexp' :: Sexpressive h => h -> IO ()
+put_sexp' = put_sexp . sexp_of
+
+

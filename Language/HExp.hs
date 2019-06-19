@@ -6,44 +6,72 @@ import Data.String
 import Data.Word
 import Data.List
 import Data.Foldable
+import Data.Vector (Vector)
 
-put_hexp :: Show a => SEXP a -> IO ()
+put_hexp :: SEXP -> IO ()
 put_hexp = putStrLn . show
 
-he1 :: SEXP Int
-he1 = List $ Single <$> [AtomI 1, AtomI 2]
-he2 :: SEXP Char
-he2 = Single $ AtomC 'x'
-he3 :: SEXP Char
-he3 = List $ Single <$> [AtomC 'x', AtomC 'y']
-he4 :: SEXP String
-he4 = List [ Single $ AtomS "cat"
-           , List (Single <$> [AtomS "bird", AtomS "wolf"])]
+he1 :: SEXP
+he1 = HExpL [HExpI 1, HExpI 2]
+he2 :: SEXP
+he2 = HExpC 'x'
+he3 :: SEXP
+he3 = HExpL [HExpC 'x', HExpC 'y']
+he4 :: SEXP
+he4 = HExpL [ HExpS "cat"
+            , HExpL [HExpS "bird", HExpS "wolf"]]
+he5 = HExpP he2 he3
+he6 = HExpP (HExpS "cat") (HExpI 12)
 
-ghcid = do traverse_ put_hexp [he1]
-           traverse_ put_hexp [he2,he3]
-           traverse_ put_hexp [he4]
+ghcid = do traverse_ put_hexp [he1,he2,he3,he4,he5,he6]
 
-data Atom a where
-  AtomB :: Bool -> Atom Bool
-  AtomI :: Int -> Atom Int
-  AtomC :: Char -> Atom Char
-  AtomS :: String -> Atom String
---  AtomL :: [SEXP a]
+data SEXP where
+  HExpB :: Bool -> SEXP
+  HExpI :: Integer -> SEXP
+  HExpC :: Char -> SEXP
+  HExpS :: String -> SEXP
+  HExpL :: [SEXP] -> SEXP
+  HExpP :: SEXP -> SEXP -> SEXP
+  HExpV :: Vector SEXP -> SEXP
 
-data SEXP a = Single (Atom a) | List [SEXP a]
-
-instance Show a => Show (SEXP a) where
+instance Show SEXP where
   show = \case
-    List xs -> '(' : (unwords $ show <$> xs) <> ")"
-    Single a -> case a of
-      AtomB b -> if b then "#t" else "#f"
-      AtomI x -> show x
-      AtomC x -> "#\\" <> [x]
-      AtomS x -> x
+    HExpL xs -> '(' : (unwords $ show <$> xs) <> ")"
+    HExpB b -> if b then "#t" else "#f"
+    HExpI x -> show x
+    HExpC x -> "#\\" <> [x]
+    HExpS x -> x
+    HExpP x y -> case y of
+      HExpL ys -> show (HExpL (x:ys))
+      _ -> '(' : unwords [show x, ".", show y]  <> ")"
+    HExpV v -> '#' : show (HExpL (toList v)) 
+
+class AsSEXP h where
+  sexp_of :: h -> SEXP
+
+instance AsSEXP Bool where
+  sexp_of = HExpB
+
+instance AsSEXP Char where
+  sexp_of = HExpC
+
+instance AsSEXP Int where
+  sexp_of = HExpI . fromIntegral
+
+instance AsSEXP Word where
+  sexp_of = HExpI . fromIntegral
+
+instance AsSEXP Integer where
+  sexp_of = HExpI
+
+instance AsSEXP h => AsSEXP [h] where
+  sexp_of = HExpL . map sexp_of
+
+instance (AsSEXP a, AsSEXP b) => AsSEXP (a,b) where
+  sexp_of (x,y) = HExpP (sexp_of x) (sexp_of y)
 
 
---instance Semigroup (SEXP a) where
+    --instance Semigroup (SEXP a) where
 --  a@Atom{} <> b@Atom{} = List [a,b]
 --  a@Atom{} <> List xs = List (a:xs)
 --  List xs <> b@Atom{} = List (xs <> [b])

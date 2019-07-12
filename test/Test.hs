@@ -23,9 +23,6 @@ import Data.Tree
 import GHC.Real
 import Language.SEXP
 
-put_hexp :: SEXP -> IO ()
-put_hexp = putStrLn . show
-
 he1 :: SEXP
 he1 = SList [SInteger 1, SInteger 2]
 he2 :: SEXP
@@ -73,5 +70,5 @@ hexps1 = [he1,he2,he3,he4,he5,he6,he7,he8,he9,he10,he11
          ,hv1,hv2,hv3,hv4,hv5,hv6,hv7,hv8,hv9,hv10,hv11
          ,ha1,ha2,ha3]
 
-ghcid = do traverse_ put_hexp hexps1
+ghcid = traverse_ put_sexp hexps1
 

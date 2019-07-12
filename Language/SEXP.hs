@@ -8,22 +8,26 @@ module Language.SEXP
   ) where
 
 import Control.Monad
-import Data.Word
-import Data.Foldable
-import Data.Vector (Vector,fromList)
+import qualified Data.Aeson as JSON
 import Data.Array (Array,listArray,bounds,elems)
 import Data.ByteString (ByteString)
-import Data.Sequence (Seq)
-import Data.Text (Text)
-import Data.Map (Map)
-import Data.Set (Set)
-import Data.IntSet (IntSet)
-import qualified Data.IntSet (toList)
+import Data.Char
+import Data.Complex
+import Data.Foldable (toList)
 import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import Data.HashSet (HashSet)
 import Data.IntMap (IntMap)
-import Data.Complex
+import Data.IntSet (IntSet)
+import qualified Data.IntSet (toList)
+import Data.Map (Map)
+import Data.Scientific
+import Data.Sequence (Seq)
+import Data.Set (Set)
+import Data.Text (Text,unpack,any)
 import Data.Tree
+import Data.Vector (Vector,fromList)
+import Data.Word
 import GHC.Real
 
 data SEXP where
@@ -45,10 +49,11 @@ data SEXP where
   SQuasiQuote :: SEXP -> SEXP
   SUnquote :: SEXP -> SEXP
   SUnquoteSplicing :: SEXP -> SEXP
+  SJSON :: JSON.Value -> SEXP
 
 instance Show SEXP where
   show = \case
-    SList xs -> '(' : (unwords $ show <$> xs) <> ")"
+    SList xs -> '(' : unwords (show <$> xs) <> ")"
     SBool b -> if b then "#t" else "#f"
     SInteger x -> show x
     SChar x -> "#\\" <> [x]
@@ -158,7 +163,6 @@ instance Sexpressive h => Sexpressive (Seq h) where
   sexp_of = sexp_of . toList
 
 instance (Sexpressive i, Sexpressive h) => Sexpressive (Array i h) where
-  -- not sure what to do here
   sexp_of xs = SList [SSymbol "array"
                      ,sexp_of (bounds xs)
                      ,sexp_of (fromList (elems xs))]
@@ -174,8 +178,20 @@ instance Sexpressive h => Sexpressive (Tree h) where
   sexp_of (Node x xs) = SCons (sexp_of x) (sexp_of xs)
 
 instance Sexpressive h => Sexpressive (Maybe h) where
-  -- truthy
-  sexp_of = maybe (SBool False) sexp_of
+  sexp_of = maybe (SBool False) sexp_of -- truthy
+
+instance Sexpressive JSON.Value where
+  sexp_of = \case
+    JSON.Bool b -> sexp_of b
+    JSON.String s -> if | Data.Text.any isSpace s -> sexp_of s
+                        | otherwise -> SSymbol $ unpack s
+    JSON.Number x -> case floatingOrInteger x of
+      Right i -> SInteger i
+      Left f -> SDouble f
+    JSON.Null -> SSymbol "null"
+    JSON.Array xs -> sexp_of xs
+    JSON.Object o -> SList [ SCons (SSymbol $ unpack k) (sexp_of v)
+                           | (k,v) <- HashMap.toList o ]
 
 scons :: SEXP -> SEXP -> SEXP
 scons (SList []) y = y
@@ -191,7 +207,7 @@ instance Monoid SEXP where
   mempty = sexp_of ()
 
 put_sexp :: SEXP -> IO ()
-put_sexp = putStrLn . show
+put_sexp = print
 
 put_sexp' :: Sexpressive h => h -> IO ()
 put_sexp' = put_sexp . sexp_of

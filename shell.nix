@@ -4,12 +4,20 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, containers, lens, stdenv, vector }:
+  f = { mkDerivation, aeson, array, base, bytestring, containers
+      , scientific, stdenv, text, unordered-containers, vector
+      }:
       mkDerivation {
-        pname = "haskexp";
+        pname = "sexpressive";
         version = "0.1.0.0";
         src = ./.;
-        libraryHaskellDepends = [ base containers lens vector ];
+        isLibrary = true;
+        isExecutable = true;
+        libraryHaskellDepends = [
+          aeson array base bytestring containers scientific text
+          unordered-containers vector
+        ];
+        executableHaskellDepends = [ aeson base ];
         license = stdenv.lib.licenses.asl20;
       };
 

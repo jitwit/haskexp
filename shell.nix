@@ -8,7 +8,7 @@ let
       , scientific, stdenv, text, unordered-containers, vector
       }:
       mkDerivation {
-        pname = "sexpressive";
+        pname = "haskexp";
         version = "0.1.0.0";
         src = ./.;
         isLibrary = true;
@@ -17,7 +17,10 @@ let
           aeson array base bytestring containers scientific text
           unordered-containers vector
         ];
-        executableHaskellDepends = [ aeson base ];
+        executableHaskellDepends = [
+          aeson array base bytestring containers scientific text
+          unordered-containers vector
+        ];
         license = stdenv.lib.licenses.asl20;
       };
 

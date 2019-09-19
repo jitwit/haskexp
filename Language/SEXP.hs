@@ -189,7 +189,7 @@ instance Sexpressive JSON.Value where
       Right i -> SInteger i
       Left f -> SDouble f
     JSON.Null -> SSymbol "null"
-    JSON.Array xs -> sexp_of xs
+    JSON.Array xs -> sexp_of $ toList xs
     JSON.Object o -> SList [ SCons (SSymbol $ unpack k) (sexp_of v)
                            | (k,v) <- HashMap.toList o ]
 
@@ -207,7 +207,7 @@ instance Monoid SEXP where
   mempty = sexp_of ()
 
 put_sexp :: SEXP -> IO ()
-put_sexp = print
+put_sexp = putStrLn . show
 
 put_sexp' :: Sexpressive h => h -> IO ()
 put_sexp' = put_sexp . sexp_of

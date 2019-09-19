@@ -24,7 +24,7 @@ import Data.Map (Map)
 import Data.Scientific
 import Data.Sequence (Seq)
 import Data.Set (Set)
-import Data.Text (Text,unpack,any)
+import Data.Text (Text,unpack,any,null)
 import Data.Tree
 import Data.Vector (Vector,fromList)
 import Data.Word
@@ -184,6 +184,7 @@ instance Sexpressive JSON.Value where
   sexp_of = \case
     JSON.Bool b -> sexp_of b
     JSON.String s -> if | Data.Text.any isSpace s -> sexp_of s
+                        | Data.Text.null s -> SString ""
                         | otherwise -> SSymbol $ unpack s
     JSON.Number x -> case floatingOrInteger x of
       Right i -> SInteger i
